@@ -5,15 +5,28 @@
 
 /**
  *
- * @author Saputra
+ * @author Lila
  */
+import javax.swing.table.DefaultTableModel;
+import javax.swing.JOptionPane;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+
 public class AplikasiPengelolaanKontak extends javax.swing.JFrame {
+    private DefaultTableModel tableModel;
+    private int selectedId = -1;
 
     /**
      * Creates new form AplikasiPengelolaanKontak
      */
     public AplikasiPengelolaanKontak() {
         initComponents();
+        setupTable();
+        loadData();
+        DatabaseConnection.createTableIfNotExists();
     }
 
     /**
@@ -234,9 +247,9 @@ public class AplikasiPengelolaanKontak extends javax.swing.JFrame {
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
                 .addGap(32, 32, 32)
-                .addComponent(jPanel2, javax.swing.GroupLayout.DEFAULT_SIZE, 149, Short.MAX_VALUE)
+                .addComponent(jPanel2, javax.swing.GroupLayout.DEFAULT_SIZE, 174, Short.MAX_VALUE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jPanel3, javax.swing.GroupLayout.DEFAULT_SIZE, 328, Short.MAX_VALUE)
+                .addComponent(jPanel3, javax.swing.GroupLayout.DEFAULT_SIZE, 273, Short.MAX_VALUE)
                 .addContainerGap())
         );
 
@@ -244,11 +257,46 @@ public class AplikasiPengelolaanKontak extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void jTable1MouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_jTable1MouseClicked
-
+        int row = jTable1.getSelectedRow();
+        if (row >= 0) {
+            selectedId = (int) tableModel.getValueAt(row, 0);
+            txtNama.setText((String) tableModel.getValueAt(row, 1));
+            txtTelpon.setText((String) tableModel.getValueAt(row, 2));
+            cbKategori.setSelectedItem(tableModel.getValueAt(row, 3));
+        }
     }//GEN-LAST:event_jTable1MouseClicked
 
     private void jButton4ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton4ActionPerformed
-        // TODO add your handling code here:
+        String searchText = jTextField3.getText().trim();
+        if (searchText.isEmpty()) {
+            loadData();
+            return;
+        }
+        
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(
+                "SELECT * FROM contacts WHERE nama LIKE ? OR telpon LIKE ?")) {
+            
+            String searchPattern = "%" + searchText + "%";
+            pstmt.setString(1, searchPattern);
+            pstmt.setString(2, searchPattern);
+            
+            ResultSet rs = pstmt.executeQuery();
+            tableModel.setRowCount(0);
+            
+            while (rs.next()) {
+                Object[] row = {
+                    rs.getInt("id"),
+                    rs.getString("nama"),
+                    rs.getString("telpon"),
+                    rs.getString("kategori")
+                };
+                tableModel.addRow(row);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error searching: " + e.getMessage());
+        }
     }//GEN-LAST:event_jButton4ActionPerformed
 
     private void btnMuatActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnMuatActionPerformed
@@ -260,15 +308,85 @@ public class AplikasiPengelolaanKontak extends javax.swing.JFrame {
     }//GEN-LAST:event_btnSimpanActionPerformed
 
     private void btnTambahActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnTambahActionPerformed
-        // TODO add your handling code here:
+        String nama = txtNama.getText();
+        String telpon = txtTelpon.getText();
+        String kategori = cbKategori.getSelectedItem().toString();
+        
+        if (nama.isEmpty() || telpon.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Nama dan nomor telepon harus diisi!");
+            return;
+        }
+        
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(
+                "INSERT INTO contacts (nama, telpon, kategori) VALUES (?, ?, ?)")) {
+            
+            pstmt.setString(1, nama);
+            pstmt.setString(2, telpon);
+            pstmt.setString(3, kategori);
+            pstmt.executeUpdate();
+            
+            clearFields();
+            loadData();
+            JOptionPane.showMessageDialog(this, "Kontak berhasil ditambahkan!");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+        }
     }//GEN-LAST:event_btnTambahActionPerformed
 
     private void btnUbahActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnUbahActionPerformed
-        // TODO add your handling code here:
+        if (selectedId == -1) {
+            JOptionPane.showMessageDialog(this, "Pilih kontak yang akan diubah!");
+            return;
+        }
+        
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(
+                "UPDATE contacts SET nama=?, telpon=?, kategori=? WHERE id=?")) {
+            
+            pstmt.setString(1, txtNama.getText());
+            pstmt.setString(2, txtTelpon.getText());
+            pstmt.setString(3, cbKategori.getSelectedItem().toString());
+            pstmt.setInt(4, selectedId);
+            pstmt.executeUpdate();
+            
+            clearFields();
+            loadData();
+            JOptionPane.showMessageDialog(this, "Kontak berhasil diubah!");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+        }
     }//GEN-LAST:event_btnUbahActionPerformed
 
     private void btnHapusActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnHapusActionPerformed
-        // TODO add your handling code here:
+        if (selectedId == -1) {
+            JOptionPane.showMessageDialog(this, "Pilih kontak yang akan dihapus!");
+            return;
+        }
+        
+        int confirm = JOptionPane.showConfirmDialog(this, 
+            "Apakah Anda yakin ingin menghapus kontak ini?",
+            "Konfirmasi Hapus",
+            JOptionPane.YES_NO_OPTION);
+            
+        if (confirm == JOptionPane.YES_OPTION) {
+            try (Connection conn = DatabaseConnection.getConnection();
+                 PreparedStatement pstmt = conn.prepareStatement(
+                    "DELETE FROM contacts WHERE id=?")) {
+                
+                pstmt.setInt(1, selectedId);
+                pstmt.executeUpdate();
+                
+                clearFields();
+                loadData();
+                JOptionPane.showMessageDialog(this, "Kontak berhasil dihapus!");
+            } catch (SQLException e) {
+                e.printStackTrace();
+                JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+            }
+        }
     }//GEN-LAST:event_btnHapusActionPerformed
 
     /**
@@ -304,6 +422,45 @@ public class AplikasiPengelolaanKontak extends javax.swing.JFrame {
                 new AplikasiPengelolaanKontak().setVisible(true);
             }
         });
+    }
+
+    private void setupTable() {
+        String[] columns = {"ID", "Nama", "No Telepon", "Kategori"};
+        tableModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        jTable1.setModel(tableModel);
+    }
+    
+    private void loadData() {
+        tableModel.setRowCount(0);
+        try (Connection conn = DatabaseConnection.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT * FROM contacts")) {
+            
+            while (rs.next()) {
+                Object[] row = {
+                    rs.getInt("id"),
+                    rs.getString("nama"),
+                    rs.getString("telpon"),
+                    rs.getString("kategori")
+                };
+                tableModel.addRow(row);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error loading data: " + e.getMessage());
+        }
+    }
+
+    private void clearFields() {
+        selectedId = -1;
+        txtNama.setText("");
+        txtTelpon.setText("");
+        cbKategori.setSelectedIndex(0);
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
