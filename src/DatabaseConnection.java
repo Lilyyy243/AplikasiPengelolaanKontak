@@ -2,8 +2,9 @@
 import java.sql.*;
 
 public class DatabaseConnection {
+
     private static final String DB_URL = "jdbc:sqlite:contacts.db";
-    
+
     public static Connection getConnection() throws SQLException {
         try {
             Class.forName("org.sqlite.JDBC");
@@ -12,7 +13,7 @@ public class DatabaseConnection {
             throw new SQLException("SQLite JDBC Driver not found", e);
         }
     }
-    
+
     public static void createTableIfNotExists() {
         String sql = """
             CREATE TABLE IF NOT EXISTS contacts (
@@ -22,9 +23,8 @@ public class DatabaseConnection {
                 kategori TEXT NOT NULL
             )
         """;
-        
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement()) {
+
+        try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
         } catch (SQLException e) {
             e.printStackTrace();

@@ -14,8 +14,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.io.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.JFileChooser;
 
 public class AplikasiPengelolaanKontak extends javax.swing.JFrame {
+
     private DefaultTableModel tableModel;
     private int selectedId = -1;
 
@@ -246,9 +250,9 @@ public class AplikasiPengelolaanKontak extends javax.swing.JFrame {
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
-                .addGap(32, 32, 32)
+                .addGap(20, 20, 20)
                 .addComponent(jPanel2, javax.swing.GroupLayout.DEFAULT_SIZE, 174, Short.MAX_VALUE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addGap(18, 18, 18)
                 .addComponent(jPanel3, javax.swing.GroupLayout.DEFAULT_SIZE, 273, Short.MAX_VALUE)
                 .addContainerGap())
         );
@@ -272,18 +276,17 @@ public class AplikasiPengelolaanKontak extends javax.swing.JFrame {
             loadData();
             return;
         }
-        
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(
+
+        try (Connection conn = DatabaseConnection.getConnection(); PreparedStatement pstmt = conn.prepareStatement(
                 "SELECT * FROM contacts WHERE nama LIKE ? OR telpon LIKE ?")) {
-            
+
             String searchPattern = "%" + searchText + "%";
             pstmt.setString(1, searchPattern);
             pstmt.setString(2, searchPattern);
-            
+
             ResultSet rs = pstmt.executeQuery();
             tableModel.setRowCount(0);
-            
+
             while (rs.next()) {
                 Object[] row = {
                     rs.getInt("id"),
@@ -300,32 +303,103 @@ public class AplikasiPengelolaanKontak extends javax.swing.JFrame {
     }//GEN-LAST:event_jButton4ActionPerformed
 
     private void btnMuatActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnMuatActionPerformed
-        // TODO add your handling code here:
+        try {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setFileFilter(new FileNameExtensionFilter("CSV files", "csv"));
+            
+            if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                try (Connection conn = DatabaseConnection.getConnection();
+                     BufferedReader br = new BufferedReader(new FileReader(fileChooser.getSelectedFile()))) {
+                    
+                    String line = br.readLine(); // Skip header
+                    while ((line = br.readLine()) != null) {
+                        String[] values = line.split(",");
+                        if (values.length == 3) {
+                            String nama = values[0].trim();
+                            String telpon = values[1].trim();
+                            String kategori = values[2].trim();
+                            
+                            if (isValidPhoneNumber(telpon)) {
+                                PreparedStatement pstmt = conn.prepareStatement(
+                                    "INSERT INTO contacts (nama, telpon, kategori) VALUES (?, ?, ?)");
+                                pstmt.setString(1, nama);
+                                pstmt.setString(2, telpon);
+                                pstmt.setString(3, kategori);
+                                pstmt.executeUpdate();
+                            }
+                        }
+                    }
+                    
+                    loadData();
+                    JOptionPane.showMessageDialog(this, "Data berhasil diimpor dari CSV!");
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error mengimpor data: " + e.getMessage());
+        }
     }//GEN-LAST:event_btnMuatActionPerformed
 
     private void btnSimpanActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnSimpanActionPerformed
-        // TODO add your handling code here:
+        try {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setFileFilter(new FileNameExtensionFilter("CSV files", "csv"));
+            
+            if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File file = fileChooser.getSelectedFile();
+                if (!file.getName().toLowerCase().endsWith(".csv")) {
+                    file = new File(file.getAbsolutePath() + ".csv");
+                }
+                
+                try (Connection conn = DatabaseConnection.getConnection();
+                     Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery("SELECT * FROM contacts");
+                     FileWriter fw = new FileWriter(file);
+                     BufferedWriter bw = new BufferedWriter(fw)) {
+                    
+                    // Write header
+                    bw.write("Nama,Telepon,Kategori\n");
+                    
+                    // Write data
+                    while (rs.next()) {
+                        bw.write(String.format("%s,%s,%s\n",
+                            rs.getString("nama"),
+                            rs.getString("telpon"),
+                            rs.getString("kategori")));
+                    }
+                    
+                    JOptionPane.showMessageDialog(this, "Data berhasil diekspor ke CSV!");
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error mengekspor data: " + e.getMessage());
+        }
     }//GEN-LAST:event_btnSimpanActionPerformed
 
     private void btnTambahActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnTambahActionPerformed
         String nama = txtNama.getText();
         String telpon = txtTelpon.getText();
         String kategori = cbKategori.getSelectedItem().toString();
-        
+
         if (nama.isEmpty() || telpon.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Nama dan nomor telepon harus diisi!");
             return;
         }
-        
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(
+
+        if (!isValidPhoneNumber(telpon)) {
+            JOptionPane.showMessageDialog(this, "Nomor telepon harus berisi 10-13 digit angka!");
+            return;
+        }
+
+        try (Connection conn = DatabaseConnection.getConnection(); PreparedStatement pstmt = conn.prepareStatement(
                 "INSERT INTO contacts (nama, telpon, kategori) VALUES (?, ?, ?)")) {
-            
+
             pstmt.setString(1, nama);
             pstmt.setString(2, telpon);
             pstmt.setString(3, kategori);
             pstmt.executeUpdate();
-            
+
             clearFields();
             loadData();
             JOptionPane.showMessageDialog(this, "Kontak berhasil ditambahkan!");
@@ -340,17 +414,22 @@ public class AplikasiPengelolaanKontak extends javax.swing.JFrame {
             JOptionPane.showMessageDialog(this, "Pilih kontak yang akan diubah!");
             return;
         }
-        
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(
+
+        String telpon = txtTelpon.getText();
+        if (!isValidPhoneNumber(telpon)) {
+            JOptionPane.showMessageDialog(this, "Nomor telepon harus berisi 10-13 digit angka!");
+            return;
+        }
+
+        try (Connection conn = DatabaseConnection.getConnection(); PreparedStatement pstmt = conn.prepareStatement(
                 "UPDATE contacts SET nama=?, telpon=?, kategori=? WHERE id=?")) {
-            
+
             pstmt.setString(1, txtNama.getText());
             pstmt.setString(2, txtTelpon.getText());
             pstmt.setString(3, cbKategori.getSelectedItem().toString());
             pstmt.setInt(4, selectedId);
             pstmt.executeUpdate();
-            
+
             clearFields();
             loadData();
             JOptionPane.showMessageDialog(this, "Kontak berhasil diubah!");
@@ -365,20 +444,19 @@ public class AplikasiPengelolaanKontak extends javax.swing.JFrame {
             JOptionPane.showMessageDialog(this, "Pilih kontak yang akan dihapus!");
             return;
         }
-        
-        int confirm = JOptionPane.showConfirmDialog(this, 
-            "Apakah Anda yakin ingin menghapus kontak ini?",
-            "Konfirmasi Hapus",
-            JOptionPane.YES_NO_OPTION);
-            
+
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Apakah Anda yakin ingin menghapus kontak ini?",
+                "Konfirmasi Hapus",
+                JOptionPane.YES_NO_OPTION);
+
         if (confirm == JOptionPane.YES_OPTION) {
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement pstmt = conn.prepareStatement(
+            try (Connection conn = DatabaseConnection.getConnection(); PreparedStatement pstmt = conn.prepareStatement(
                     "DELETE FROM contacts WHERE id=?")) {
-                
+
                 pstmt.setInt(1, selectedId);
                 pstmt.executeUpdate();
-                
+
                 clearFields();
                 loadData();
                 JOptionPane.showMessageDialog(this, "Kontak berhasil dihapus!");
@@ -434,13 +512,11 @@ public class AplikasiPengelolaanKontak extends javax.swing.JFrame {
         };
         jTable1.setModel(tableModel);
     }
-    
+
     private void loadData() {
         tableModel.setRowCount(0);
-        try (Connection conn = DatabaseConnection.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM contacts")) {
-            
+        try (Connection conn = DatabaseConnection.getConnection(); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery("SELECT * FROM contacts")) {
+
             while (rs.next()) {
                 Object[] row = {
                     rs.getInt("id"),
@@ -461,6 +537,11 @@ public class AplikasiPengelolaanKontak extends javax.swing.JFrame {
         txtNama.setText("");
         txtTelpon.setText("");
         cbKategori.setSelectedIndex(0);
+    }
+
+    private boolean isValidPhoneNumber(String phone) {
+        // Check if phone number contains only digits and has length between 10-13
+        return phone.matches("\\d{10,13}");
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
